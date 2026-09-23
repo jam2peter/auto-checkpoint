@@ -221,6 +221,76 @@ def write_json(path: Path, value: dict) -> None:
     temp.replace(path)
 
 
+def repo_relative_or_name(repo: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        return path.name
+
+
+def verify_quality_gate_report(
+    repo: Path,
+    report_value: str | None,
+    config_value: str | None,
+    quality_gate_bin: str,
+) -> dict | None:
+    if not report_value:
+        return None
+
+    report_path = Path(report_value)
+    if not report_path.is_absolute():
+        report_path = repo / report_path
+
+    if not report_path.is_file():
+        raise Blocked("QUALITY_REPORT=NOT_FOUND")
+
+    command = [
+        quality_gate_bin,
+        "verify-report",
+        "--repo",
+        str(repo),
+        "--report",
+        str(report_path),
+    ]
+
+    if config_value:
+        config_path = Path(config_value)
+        if not config_path.is_absolute():
+            config_path = repo / config_path
+        if not config_path.is_file():
+            raise Blocked("QUALITY_CONFIG=NOT_FOUND")
+        command.extend(["--config", str(config_path)])
+
+    try:
+        result = run(command, cwd=repo, check=False)
+    except FileNotFoundError as exc:
+        raise Blocked("QUALITY_GATE=NOT_INSTALLED") from exc
+
+    if result.returncode != 0:
+        raise Blocked("QUALITY_REPORT=STALE_OR_FAIL")
+
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Blocked("QUALITY_REPORT=INVALID") from exc
+
+    if report.get("schema_version") != 1 or report.get("result") != "PASS":
+        raise Blocked("QUALITY_REPORT=INVALID_OR_NOT_PASS")
+
+    git_state = report.get("git_state")
+    if not isinstance(git_state, dict) or not git_state.get("fingerprint"):
+        raise Blocked("QUALITY_REPORT=FINGERPRINT_MISSING")
+
+    return {
+        "status": "PASS",
+        "report": repo_relative_or_name(repo, report_path),
+        "profile": report.get("profile", "unknown"),
+        "tool_version": report.get("tool_version"),
+        "git_state_fingerprint": git_state.get("fingerprint"),
+        "config_sha256": report.get("config_sha256"),
+    }
+
+
 def validate_task_files(repo: Path, task_files: set[str]) -> None:
     diff_check = git(
         repo,
@@ -274,6 +344,13 @@ def checkpoint(args: argparse.Namespace) -> int:
             raise Blocked(f"SECRET_OR_PRIVATE={rel} ({reason})")
 
     validate_task_files(repo, task_files)
+
+    quality_gate = verify_quality_gate_report(
+        repo,
+        args.quality_report,
+        args.quality_config,
+        args.quality_gate_bin,
+    )
 
     test_results = []
     for command in args.validate:
@@ -340,6 +417,7 @@ def checkpoint(args: argparse.Namespace) -> int:
         "head_before": head_before,
         "files": hashes,
         "tests": test_results,
+        "quality_gate": quality_gate or {"status": "NOT_REQUIRED"},
         "validation": "PASS",
         "commit_message": args.message,
         "git_remote": {
@@ -488,6 +566,7 @@ def checkpoint(args: argparse.Namespace) -> int:
     print(f"WIPS_PRESERVED={','.join(sorted(preserved))}")
     print("UNKNOWN_FILES=")
     print("VALIDATION=PASS")
+    print("QUALITY_GATE=" + ("PASS" if quality_gate else "NOT_REQUIRED"))
     print(f"BACKUP_CREATED={backup}")
     print("COMMIT_CREATED=YES")
     print(f"COMMIT_HASH={commit_hash}")
@@ -672,6 +751,9 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--preserve-wip", action="append", default=[])
     create.add_argument("--generated", action="append", default=[])
     create.add_argument("--validate", action="append", default=[])
+    create.add_argument("--quality-report")
+    create.add_argument("--quality-config")
+    create.add_argument("--quality-gate-bin", default="quality-gate")
     create.add_argument("--remote", default="origin")
     create.add_argument("--offsite")
     create.add_argument("--rclone-bin", default="rclone")
