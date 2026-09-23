@@ -4,7 +4,6 @@ from __future__ import annotations
 import pathlib
 import re
 import subprocess
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKIP = {
