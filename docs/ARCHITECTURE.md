@@ -41,6 +41,35 @@ push + remote verification
       +-- FAIL -> private retry queue
 ```
 
+## Quality boundary
+
+When a `--quality-report` is supplied, Auto Checkpoint verifies the report
+before the private checkpoint is created.
+
+```text
+working tree
+   |
+   v
+Quality Gate
+   |
+   +-- PASS report + Git fingerprint
+   |
+   v
+Auto Checkpoint verify-report
+   |
+   +-- stale/fail -> BLOCK
+   |
+   v
+private checkpoint -> commit -> push
+```
+
+Auto Checkpoint delegates fingerprint semantics to the installed Quality Gate
+verifier instead of reimplementing that policy.
+
+The Quality Gate report is evidence for the pre-checkpoint state. The later
+checkpoint manifest stores the verified fingerprint so the relationship remains
+auditable after the commit changes HEAD.
+
 ## Why checkpoint before commit
 
 The private checkpoint is created before Git staging/commit. It preserves the
