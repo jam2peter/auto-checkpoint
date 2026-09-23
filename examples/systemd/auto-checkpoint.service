@@ -1,0 +1,10 @@
+[Unit]
+Description=Auto Checkpoint one-shot task preservation
+
+[Service]
+Type=oneshot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/auto-checkpoint checkpoint @%h/.local/state/auto-checkpoint/request.args
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
