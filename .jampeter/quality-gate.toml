@@ -1,0 +1,48 @@
+version = 1
+profile = "auto-checkpoint-python-pilot"
+
+[report]
+path = ".quality-gate/report.json"
+
+[[gate]]
+id = "format"
+phase = "format"
+command = "ruff format --check src tests scripts"
+required = false
+safe_fix = "ruff format src tests scripts"
+
+[[gate]]
+id = "complexity"
+phase = "clean"
+command = "ruff check src tests scripts --select C90"
+required = false
+
+[[gate]]
+id = "lint"
+phase = "lint"
+command = "ruff check src tests scripts --select E4,E7,E9,F"
+required = true
+
+[[gate]]
+id = "compile"
+phase = "type"
+command = "python3 -m compileall -q src tests scripts"
+required = true
+
+[[gate]]
+id = "tests"
+phase = "test"
+command = "PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py' -v"
+required = true
+
+[[gate]]
+id = "security"
+phase = "security"
+command = "python3 scripts/quality_security_scan.py"
+required = true
+
+[[gate]]
+id = "package"
+phase = "build"
+command = "python3 -m pip wheel . --no-deps -w /tmp/auto-checkpoint-wheel >/dev/null"
+required = true

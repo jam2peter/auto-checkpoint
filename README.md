@@ -76,6 +76,42 @@ The commit message becomes:
 task(TASK-123): finish parser validation
 ```
 
+## Quality Gate integration
+
+Auto Checkpoint can require a fresh PASS report from
+[JamPeter Quality Gate](https://github.com/jam2peter/quality-gate).
+
+Example:
+
+```bash
+quality-gate run --config .jampeter/quality-gate.toml
+
+auto-checkpoint checkpoint \
+  --repo /path/to/repository \
+  --task-id TASK-123 \
+  --message "finish parser validation" \
+  --file src/parser.py \
+  --quality-report .quality-gate/report.json \
+  --quality-config .jampeter/quality-gate.toml
+```
+
+When `--quality-report` is used, Auto Checkpoint calls
+`quality-gate verify-report` before creating a checkpoint.
+
+The operation blocks when:
+
+- the report is missing;
+- the report result is not PASS;
+- HEAD changed;
+- the working tree changed;
+- the quality configuration changed;
+- the Quality Gate verifier is unavailable.
+
+The generated `.quality-gate/` directory should be ignored by Git.
+
+This integration is optional for backward compatibility. Existing
+`--validate` commands remain supported.
+
 ## Private state
 
 By default, checkpoint state is stored under:
