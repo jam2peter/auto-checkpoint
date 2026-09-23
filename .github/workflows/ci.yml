@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python
+        run: python3 --version
+
+      - name: Compile
+        run: python3 -m compileall -q src tests
+
+      - name: Unit tests
+        run: PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Package smoke
+        run: |
+          python3 -m pip install .
+          auto-checkpoint --help >/dev/null
+
+      - name: Sanitization scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RInE '/home/jam|jha-auto-checkpoint|Alfredo-Haras|JÃO|Haras|JamPeter-Infrastructure'             --exclude-dir=.git --exclude=ci.yml .
+          ! grep -RInE '192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.'             --exclude-dir=.git --exclude=ci.yml .
+          ! grep -RInE '(ghp_|github_pat_|AIza[0-9A-Za-z_-]{20,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)'             --exclude-dir=.git --exclude=ci.yml .
